@@ -5,11 +5,15 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import shlex
 import shutil
 import subprocess
+import tempfile
+import time
 from pathlib import Path
-from typing import Any
+from pathlib import PureWindowsPath
+from typing import Any, Callable
 
 from rocket_analysis.models import MachComparison, MachStation
 
@@ -20,25 +24,69 @@ def run_openfoam_case(
     distro: str = "Ubuntu-24.04",
     run_script: str = "Allrun",
     timeout: float | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run an OpenFOAM case script inside the selected WSL distribution.
 
     ``case_path`` must be an absolute Linux path in the WSL filesystem.
     """
+    if os.name == "nt" and (case_path.casefold().startswith("\\\\wsl$\\") or case_path.casefold().startswith("\\\\wsl.localhost\\")):
+        converted = subprocess.run(
+            ["wsl.exe", "-d", distro, "--", "wslpath", "-u", case_path],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        case_path = converted.stdout.strip()
     if not case_path.startswith("/"):
-        raise ValueError("case_path must be an absolute Linux path")
+        raise ValueError("case_path must be an absolute Linux path or a WSL UNC path")
     if Path(run_script).name != run_script or run_script in {".", ".."}:
         raise ValueError("run_script must be a file name within the case directory")
     command = f"cd -- {shlex.quote(case_path)} && ./{shlex.quote(run_script)}"
-    return subprocess.run(
-        ["wsl.exe", "-d", distro, "--", "openfoam2512", "-c", command],
-        check=True,
-        capture_output=True,
+    arguments = ["wsl.exe", "-d", distro, "--", "openfoam2512", "-c", command]
+    process = subprocess.Popen(
+        arguments,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=timeout,
     )
+    deadline = time.monotonic() + timeout if timeout is not None else None
+    while True:
+        wait_for = 0.25
+        if deadline is not None:
+            wait_for = max(0.01, min(wait_for, deadline - time.monotonic()))
+        try:
+            stdout, stderr = process.communicate(timeout=wait_for)
+            break
+        except subprocess.TimeoutExpired:
+            try:
+                if cancel_check:
+                    cancel_check()
+            except Exception:
+                process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                raise
+            if deadline is not None and time.monotonic() >= deadline:
+                process.terminate()
+                try:
+                    stdout, stderr = process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    stdout, stderr = process.communicate()
+                raise subprocess.TimeoutExpired(arguments, timeout, output=stdout, stderr=stderr)
+    completed = subprocess.CompletedProcess(arguments, process.returncode, stdout, stderr)
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, arguments, output=stdout, stderr=stderr)
+    return completed
 
 
 def openfoam_finalist_ids(ranking_result: Any, *, limit: int = 3) -> tuple[str, ...]:
@@ -59,6 +107,7 @@ def prepare_openfoam_finalist_case(
     candidate_id: str,
     finalist_ids: tuple[str, ...],
     replacements: dict[str, str | int | float],
+    cancel_check: Callable[[], None] | None = None,
 ) -> Path:
     """Copy a user-supplied OpenFOAM template and substitute its tokens.
 
@@ -69,6 +118,14 @@ def prepare_openfoam_finalist_case(
     if candidate_id not in finalist_ids:
         raise ValueError(f"Candidate {candidate_id!r} is not in the selected CFD finalist set")
     source = Path(template_dir).resolve()
+    raw_destination = str(destination)
+    if os.name == "nt":
+        windows_destination = PureWindowsPath(raw_destination)
+        normalized_destination = raw_destination.casefold()
+        if not (normalized_destination.startswith("\\\\wsl$\\") or normalized_destination.startswith("\\\\wsl.localhost\\")):
+            raise ValueError("OpenFOAM finalist cases must be stored under a WSL UNC path (\\\\wsl$\\<distro>\\...).")
+        if len(windows_destination.parts) < 2:
+            raise ValueError("WSL destination must name a distribution and a directory")
     target = Path(destination).resolve()
     if not source.is_dir():
         raise NotADirectoryError(f"OpenFOAM template directory not found: {source}")
@@ -80,34 +137,50 @@ def prepare_openfoam_finalist_case(
     tokens = {"{{" + str(name) + "}}": str(value) for name, value in replacements.items()}
     if not tokens:
         raise ValueError("At least one template replacement is required")
-    shutil.copytree(source, target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary_root = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent))
+    temporary_target = temporary_root / target.name
     seen: set[str] = set()
-    for path in target.rglob("*"):
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        for token, value in tokens.items():
-            if token in text:
-                seen.add(token)
-                text = text.replace(token, value)
-        path.write_text(text, encoding="utf-8")
-    missing = sorted(set(tokens) - seen)
-    if missing:
-        shutil.rmtree(target)
-        raise ValueError("Template did not contain replacement token(s): " + ", ".join(missing))
-    manifest = {
-        "candidate_id": candidate_id,
-        "template_directory": str(source),
-        "replaced_tokens": sorted(seen),
-        "status": "prepared_for_user_review",
-        "validation_claim": "none; supply appropriate physics, mesh, and boundary conditions",
-    }
-    (target / "rocket-analysis-finalist.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-    )
+    try:
+        def copy_with_checkpoint(source_file: str, destination_file: str):
+            if cancel_check:
+                cancel_check()
+            return shutil.copy2(source_file, destination_file)
+
+        shutil.copytree(source, temporary_target, copy_function=copy_with_checkpoint)
+        for path in temporary_target.rglob("*"):
+            if cancel_check:
+                cancel_check()
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for token, value in tokens.items():
+                if token in text:
+                    seen.add(token)
+                    text = text.replace(token, value)
+            path.write_text(text, encoding="utf-8")
+        missing = sorted(set(tokens) - seen)
+        if missing:
+            raise ValueError("Template did not contain replacement token(s): " + ", ".join(missing))
+        manifest = {
+            "candidate_id": candidate_id,
+            "template_directory": str(source),
+            "replaced_tokens": sorted(seen),
+            "status": "prepared_for_user_review",
+            "validation_claim": "none; supply appropriate physics, mesh, and boundary conditions",
+        }
+        (temporary_target / "rocket-analysis-finalist.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        os.replace(temporary_target, target)
+    except Exception:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        raise
+    else:
+        shutil.rmtree(temporary_root, ignore_errors=True)
     return target
 
 
@@ -115,12 +188,13 @@ def run_openfoam_finalist_case(
     candidate_id: str,
     finalist_ids: tuple[str, ...],
     case_path: str,
+    cancel_check: Callable[[], None] | None = None,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess[str]:
     """Run an existing case only when its candidate is in the finalist set."""
     if candidate_id not in finalist_ids:
         raise ValueError(f"Candidate {candidate_id!r} is not in the selected CFD finalist set")
-    return run_openfoam_case(case_path, **kwargs)
+    return run_openfoam_case(case_path, cancel_check=cancel_check, **kwargs)
 
 
 def read_station_csv(path: str | Path) -> tuple[MachStation, ...]:

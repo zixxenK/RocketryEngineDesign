@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R12",
+    "case_name":  "cal-R12",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "multiphase":  false
+                   },
+    "parameter_units":  {
+                            "multiphase":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "multiphase false",
+    "priority":  3,
+    "cfg_sha256":  "622c7ebcc3b445a003a453a07e51f63906ea0008d38fe29c164df2d9319553ae",
+    "schema_version":  1
+}

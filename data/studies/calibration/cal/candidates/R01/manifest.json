@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R01",
+    "case_name":  "cal-R01",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "nozzle_inlet_area_ratio":  2.0
+                   },
+    "parameter_units":  {
+                            "nozzle_inlet_area_ratio":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "nozzle inlet areaRatio 2",
+    "priority":  1,
+    "cfg_sha256":  "0650170cf484955440c9df8497bea57a56797a69bb920ced7a4457aebac89bda",
+    "schema_version":  1
+}

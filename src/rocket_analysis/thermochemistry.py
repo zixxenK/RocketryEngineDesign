@@ -15,6 +15,7 @@ from typing import Any
 @dataclass(frozen=True)
 class CEAIdealScreen:
     model: str
+    chamber_contraction_area_ratio: float | None
     propellants: dict[str, str]
     mixture_ratio: float
     chamber_pressure_mpa: float
@@ -59,6 +60,8 @@ def run_cea_ideal_screen(
     oxidizer_temperature_k: float = 90.2,
     fuel_name: str = "RP-1",
     oxidizer_name: str = "O2(L)",
+    finite_area_chamber: bool = False,
+    chamber_contraction_area_ratio: float | None = None,
 ) -> CEAIdealScreen:
     """Solve an ideal, equilibrium CEA rocket case for RP-1/LOX conditions.
 
@@ -79,6 +82,12 @@ def run_cea_ideal_screen(
         raise ValueError("O/F and chamber pressure must be positive; exit area ratio must exceed 1")
     if fuel_temperature_k <= 0 or oxidizer_temperature_k <= 0:
         raise ValueError("Propellant temperatures must be positive")
+    if finite_area_chamber and (
+        chamber_contraction_area_ratio is None
+        or not math.isfinite(float(chamber_contraction_area_ratio))
+        or chamber_contraction_area_ratio <= 1
+    ):
+        raise ValueError("Finite-area CEA requires chamber_contraction_area_ratio > 1")
 
     try:
         import cea
@@ -105,8 +114,9 @@ def run_cea_ideal_screen(
         weights,
         chamber_pressure_bar,
         supar=[exit_area_ratio],
-        iac=True,
+        iac=not finite_area_chamber,
         hc=chamber_enthalpy,
+        ac_at=chamber_contraction_area_ratio if finite_area_chamber else None,
     )
 
     def last_finite(name: str) -> float:
@@ -117,7 +127,13 @@ def run_cea_ideal_screen(
         return float(finite[-1])
 
     return CEAIdealScreen(
-        model="NASA CEA 3.3.4 RocketSolver; ideal equilibrium expansion",
+        model=(
+            "NASA CEA 3.3.4 RocketSolver; ideal equilibrium, "
+            + ("finite-area chamber" if finite_area_chamber else "infinite-area chamber")
+        ),
+        chamber_contraction_area_ratio=(
+            float(chamber_contraction_area_ratio) if finite_area_chamber else None
+        ),
         propellants={"fuel": fuel_name, "oxidizer": oxidizer_name},
         mixture_ratio=float(mixture_ratio),
         chamber_pressure_mpa=float(chamber_pressure_mpa),

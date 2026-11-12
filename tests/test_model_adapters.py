@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -69,6 +70,7 @@ def test_openmdao_component_wraps_callable_and_reports_objective():
     assert float(totals["thrust", "area"].item()) == pytest.approx(2.0, rel=1e-4)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows must stage finalist cases directly in WSL via a UNC path")
 def test_openfoam_helpers_gate_finalists_and_substitute_template_tokens(tmp_path):
     class Entry:
         def __init__(self, candidate_id, rank):
@@ -100,6 +102,21 @@ def test_openfoam_helpers_gate_finalists_and_substitute_template_tokens(tmp_path
             tmp_path / "not-a-finalist",
             candidate_id="a",
             finalist_ids=finalists,
+            replacements={"pc": 2.5},
+        )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-specific OpenFOAM destination safety")
+def test_openfoam_finalist_case_rejects_windows_local_storage(tmp_path):
+    template = tmp_path / "template"
+    template.mkdir()
+    (template / "case.dict").write_text("pressure {{pc}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be stored under a WSL UNC path"):
+        prepare_openfoam_finalist_case(
+            template,
+            tmp_path / "finalist-b",
+            candidate_id="b",
+            finalist_ids=("b",),
             replacements={"pc": 2.5},
         )
 

@@ -50,6 +50,7 @@ def test_candidate_cfg_generation_is_stable_and_screening_is_persisted(tmp_path)
         sampling_method="grid",
         sample_count=2,
         max_candidates=10,
+        design_constraints=(),
     )
 
     candidates = generate_candidate_cfgs(spec)
@@ -92,6 +93,7 @@ def test_staging_and_partial_shared_folder_loading(tmp_path):
         sampling_method="grid",
         sample_count=1,
         max_candidates=2,
+        design_constraints=(),
     )
     candidates = generate_candidate_cfgs(spec)
     share = tmp_path / "share"
@@ -144,6 +146,20 @@ def test_shared_results_import_and_ranking_accept_area_ratio_review(tmp_path):
     assert [entry.candidate_id for entry in ranking.entries] == ["candidate-test"]
     assert not ranking.exclusions
 
+    second_share = tmp_path / "second-share"
+    second_share.mkdir()
+    shutil.copyfile(CFG, second_share / "candidate.cfg")
+    (second_share / "candidate.pdf").write_bytes(PDF.read_bytes() + b"\n% second report export\n")
+    second_import = import_shared_rpa4_results(spec, second_share)
+    assert len(second_import["report_history"]) == 2
+    assert len(second_import["results"]) == 1
+    assert second_import["results"][0]["report_id"] != imported["results"][0]["report_id"]
+    assert len(second_import["last_imported_report_ids"]) == 1
+
+    repeated = import_shared_rpa4_results(spec, second_share)
+    assert repeated["last_imported_report_ids"] == []
+    assert len(repeated["report_history"]) == 2
+
 
 def test_adaptive_trials_persist_and_complete_from_imported_report(tmp_path):
     source = load_study_spec(STUDY_JSON)
@@ -154,6 +170,7 @@ def test_adaptive_trials_persist_and_complete_from_imported_report(tmp_path):
         sampling_method="adaptive",
         sample_count=1,
         max_candidates=2,
+        design_constraints=(),
     )
     generated = generate_candidate_cfgs(spec)
     candidate = generated[0]
@@ -174,5 +191,6 @@ def test_adaptive_trials_persist_and_complete_from_imported_report(tmp_path):
     study = _optuna_study(spec)
     trial = next(item for item in study.get_trials(deepcopy=False) if item.number == candidate.optuna_trial_number)
     assert trial.state.name == "COMPLETE"
-    assert trial.values == [26.7328, 119.4993]
+    expected_values = [imported["results"][0]["metrics"][item["metric"]] for item in spec.ranking["objectives"]]
+    assert trial.values == expected_values
 

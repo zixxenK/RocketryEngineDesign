@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R11",
+    "case_name":  "cal-R11",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "mixture_ratio":  1.5
+                   },
+    "parameter_units":  {
+                            "mixture_ratio":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "baseline in generator format",
+    "priority":  3,
+    "cfg_sha256":  "7b7ef3d880ff2d8e48b30906ea46c46da4a4c8b89befbea93c10a4a44c867603",
+    "schema_version":  1
+}

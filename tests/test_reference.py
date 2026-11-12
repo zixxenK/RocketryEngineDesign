@@ -113,15 +113,23 @@ def test_station_mach_comparison_rejects_non_finite_results():
 def test_openfoam_runner_uses_wsl_and_quotes_case_path(monkeypatch):
     captured = {}
 
-    def fake_run(args, **kwargs):
+    class FakeProcess:
+        returncode = 0
+
+        @staticmethod
+        def communicate(timeout=None):
+            return "completed", ""
+
+    def fake_popen(args, **kwargs):
         captured["args"] = args
         captured["kwargs"] = kwargs
-        return "completed"
+        return FakeProcess()
 
-    monkeypatch.setattr("rocket_analysis.cfd.subprocess.run", fake_run)
+    monkeypatch.setattr("rocket_analysis.cfd.subprocess.Popen", fake_popen)
     result = run_openfoam_case("/home/rocket/cases/test case")
 
-    assert result == "completed"
+    assert result.stdout == "completed"
+    assert result.returncode == 0
     assert captured["args"] == [
         "wsl.exe",
         "-d",
@@ -131,7 +139,9 @@ def test_openfoam_runner_uses_wsl_and_quotes_case_path(monkeypatch):
         "-c",
         "cd -- '/home/rocket/cases/test case' && ./Allrun",
     ]
-    assert captured["kwargs"]["check"] is True
+    assert captured["kwargs"]["stdout"] is not None
+    assert captured["kwargs"]["stderr"] is not None
+    assert captured["kwargs"]["text"] is True
 
 
 def test_openfoam_runner_rejects_non_linux_paths():

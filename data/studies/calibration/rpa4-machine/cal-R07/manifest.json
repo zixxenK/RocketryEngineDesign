@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R07",
+    "case_name":  "cal-R07",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "nozzle_exit_area_ratio":  10.0
+                   },
+    "parameter_units":  {
+                            "nozzle_exit_area_ratio":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "exit areaRatio 10",
+    "priority":  2,
+    "cfg_sha256":  "e898bb45f20a4b66b17c0a36cf40325f5f7e32fddad2ec6a9be5a7597b0182b3",
+    "schema_version":  1
+}

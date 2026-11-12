@@ -6,7 +6,7 @@ import pytest
 
 from rocket_analysis.optimization import OBJECTIVE, optimize_rpa4_cases
 from rocket_analysis.rpa4_validation import load_rpa4_inputs
-from rocket_analysis.shared import SharedRPA4Case, load_shared_rpa4_cases
+from rocket_analysis.shared import SharedRPA4Case, load_shared_rpa4_cases, scan_shared_rpa4_cases
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,13 +50,15 @@ def test_shared_folder_reads_environment_path_and_rejects_missing_pair(tmp_path,
         load_shared_rpa4_cases()
 
 
-def test_shared_folder_rejects_ambiguous_duplicate_case_names(tmp_path):
+def test_shared_folder_collapses_identical_duplicate_case_names(tmp_path):
     shutil.copyfile(CFG, tmp_path / "one.cfg")
     shutil.copyfile(CFG, tmp_path / "two.cfg")
     shutil.copyfile(PDF, tmp_path / "report.pdf")
 
-    with pytest.raises(ValueError, match="Multiple CFG files use the case name"):
-        load_shared_rpa4_cases(tmp_path)
+    scan = scan_shared_rpa4_cases(tmp_path)
+    assert len(scan.cases) == 1
+    assert len(scan.duplicates) == 1
+    assert not scan.problems
 
 
 def test_shared_folder_requires_cfg_and_pdf_to_share_a_case_directory(tmp_path):

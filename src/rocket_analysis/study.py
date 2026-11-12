@@ -11,9 +11,10 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import numpy as np
 from scipy.stats import qmc
@@ -28,8 +29,9 @@ from rocket_analysis.ranking import (
 from rocket_analysis.rpa4 import parse_report_values
 from rocket_analysis.rpa4_validation import load_rpa4_config
 
-SamplingMethod = Literal["grid", "sobol", "adaptive"]
+SamplingMethod = Literal["grid", "sobol", "adaptive", "explicit"]
 ParameterKind = Literal["float", "integer", "categorical", "boolean"]
+SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class ParameterSpec:
     values: tuple[Any, ...] = ()
     unit: str | None = None
     log: bool = False
+    precision: int = 8
 
     @classmethod
     def from_dict(cls, name: str, values: dict[str, Any]) -> "ParameterSpec":
@@ -72,6 +75,9 @@ class ParameterSpec:
             raise ValueError(f"Integer parameter {name!r} requires integer bounds")
         if bool(values.get("log", False)) and minimum <= 0:
             raise ValueError(f"Log-scaled parameter {name!r} requires a positive minimum")
+        precision = int(values.get("precision", 8))
+        if precision < 0 or precision > 15:
+            raise ValueError(f"Parameter {name!r} precision must be between 0 and 15 decimal places")
         return cls(
             name=name,
             kind=kind,
@@ -80,6 +86,7 @@ class ParameterSpec:
             levels=levels,
             unit=values.get("unit"),
             log=bool(values.get("log", False)),
+            precision=precision,
         )
 
 
@@ -96,6 +103,10 @@ class StudySpec:
     max_candidates: int
     ranking: dict[str, Any]
     analysis: dict[str, Any]
+    schema_version: int = SCHEMA_VERSION
+    population_size: int = 50
+    explicit_candidates: tuple[dict[str, Any], ...] = ()
+    design_constraints: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,6 +150,11 @@ def load_study_spec(path: str | Path) -> StudySpec:
     """Load and validate a JSON study specification."""
     source = Path(path).resolve()
     data = json.loads(source.read_text(encoding="utf-8"))
+    schema_version = int(data.get("schema_version", 1))
+    if schema_version != SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported study schema_version {schema_version}; expected {SCHEMA_VERSION}"
+        )
     study_id = str(data.get("study_id", "")).strip()
     if not study_id or re.fullmatch(r"[A-Za-z0-9._-]+", study_id) is None:
         raise ValueError("study_id must contain only letters, numbers, dot, underscore, or hyphen")
@@ -162,30 +178,70 @@ def load_study_spec(path: str | Path) -> StudySpec:
     if not isinstance(sampling, dict):
         raise ValueError("sampling must be an object")
     method = str(sampling.get("method", "sobol"))
-    if method not in {"grid", "sobol", "adaptive"}:
-        raise ValueError("sampling.method must be grid, sobol, or adaptive")
-    count = int(sampling.get("count", 32))
+    if method not in {"grid", "sobol", "adaptive", "explicit"}:
+        raise ValueError("sampling.method must be grid, sobol, adaptive, or explicit")
+    raw_explicit = sampling.get("candidates", [])
+    if not isinstance(raw_explicit, list):
+        raise ValueError("sampling.candidates must be a list")
+    if method == "explicit" and (not isinstance(raw_explicit, list) or not raw_explicit):
+        raise ValueError("sampling.candidates must be a non-empty list for explicit sampling")
+    count = int(sampling.get("count", len(raw_explicit) if method == "explicit" else 32))
     seed = int(sampling.get("seed", 12345))
     max_candidates = int(sampling.get("max_candidates", 10000))
+    population_size = int(sampling.get("population_size", 50))
     if count < 1 or max_candidates < 1 or count > max_candidates:
         raise ValueError("sampling count and max_candidates must be positive, with count <= max_candidates")
+    if population_size < 2:
+        raise ValueError("sampling.population_size must be at least 2")
+    if method == "explicit" and count != len(raw_explicit):
+        raise ValueError("sampling.count must equal the number of explicit candidates")
 
     ranking = data.get("ranking", {})
     analysis = data.get("analysis", {})
     if not isinstance(ranking, dict) or not isinstance(analysis, dict):
         raise ValueError("ranking and analysis must be objects")
+    raw_design_constraints = data.get("design_constraints", [])
+    if not isinstance(raw_design_constraints, list) or any(not isinstance(item, dict) for item in raw_design_constraints):
+        raise ValueError("design_constraints must be a list of objects")
+    for index, constraint in enumerate(raw_design_constraints):
+        operator = constraint.get("operator")
+        if operator not in {"<", "<=", "==", ">=", ">"}:
+            raise ValueError(f"design_constraints[{index}].operator must be one of <, <=, ==, >=, >")
+        if not isinstance(constraint.get("left"), str) or not constraint["left"].strip():
+            raise ValueError(f"design_constraints[{index}].left must name a parameter")
+        if ("right" in constraint) == ("value" in constraint):
+            raise ValueError(f"design_constraints[{index}] must provide exactly one of right or value")
+        if "right" in constraint and not isinstance(constraint["right"], str):
+            raise ValueError(f"design_constraints[{index}].right must name a parameter")
+        parameter_names = {item.name for item in parameters}
+        if constraint["left"] not in parameter_names:
+            raise ValueError(f"design_constraints[{index}].left is not a study parameter")
+        if "right" in constraint and constraint["right"] not in parameter_names:
+            raise ValueError(f"design_constraints[{index}].right is not a study parameter")
+        if "value" in constraint:
+            try:
+                if not math.isfinite(float(constraint["value"])):
+                    raise ValueError
+            except (TypeError, ValueError, OverflowError) as error:
+                raise ValueError(f"design_constraints[{index}].value must be finite numeric") from error
+    if any(not isinstance(item, dict) for item in raw_explicit):
+        raise ValueError("Each explicit sampling candidate must be an object")
     return StudySpec(
         study_id=study_id,
         source_path=source,
         base_cfg=base_cfg,
         output_dir=output_dir,
         parameters=parameters,
-        sampling_method=method,  # type: ignore[arg-type]
+        sampling_method=method,  # type: ignore[assignment]
         sample_count=count,
         seed=seed,
         max_candidates=max_candidates,
         ranking=ranking,
         analysis=analysis,
+        schema_version=schema_version,
+        population_size=population_size,
+        explicit_candidates=tuple(raw_explicit),
+        design_constraints=tuple(raw_design_constraints),
     )
 
 
@@ -196,6 +252,8 @@ def _grid_values(parameter: ParameterSpec) -> list[Any]:
     assert parameter.levels is not None
     if parameter.levels == 1:
         values = [parameter.minimum]
+    elif parameter.log:
+        values = np.geomspace(parameter.minimum, parameter.maximum, parameter.levels).tolist()
     else:
         values = np.linspace(parameter.minimum, parameter.maximum, parameter.levels).tolist()
     if parameter.kind == "integer":
@@ -217,7 +275,16 @@ def _sobol_values(
         column = 0
         for parameter in continuous:
             assert parameter.minimum is not None and parameter.maximum is not None
-            raw = float(parameter.minimum) + row[column] * (float(parameter.maximum) - float(parameter.minimum))
+            if parameter.log:
+                raw = math.exp(
+                    math.log(float(parameter.minimum))
+                    + row[column]
+                    * (math.log(float(parameter.maximum)) - math.log(float(parameter.minimum)))
+                )
+            else:
+                raw = float(parameter.minimum) + row[column] * (
+                    float(parameter.maximum) - float(parameter.minimum)
+                )
             sample[parameter.name] = int(round(raw)) if parameter.kind == "integer" else raw
             column += 1
         for parameter in categorical:
@@ -233,6 +300,7 @@ def _adaptive_values(
     count: int,
     *,
     study: Any | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> tuple[list[dict[str, Any]], list[int]]:
     try:
         import optuna
@@ -253,27 +321,44 @@ def _adaptive_values(
         )
     samples: list[dict[str, Any]] = []
     trials: list[int] = []
-    for _ in range(count):
-        trial = study.ask()
-        values: dict[str, Any] = {}
-        for parameter in spec.parameters:
-            if parameter.kind in {"categorical", "boolean"}:
-                values[parameter.name] = trial.suggest_categorical(parameter.name, list(parameter.values))
-            elif parameter.kind == "integer":
-                assert parameter.minimum is not None and parameter.maximum is not None
-                values[parameter.name] = trial.suggest_int(
-                    parameter.name, int(parameter.minimum), int(parameter.maximum)
-                )
-            else:
-                assert parameter.minimum is not None and parameter.maximum is not None
-                values[parameter.name] = trial.suggest_float(
-                    parameter.name,
-                    float(parameter.minimum),
-                    float(parameter.maximum),
-                    log=parameter.log,
-                )
-        samples.append(values)
-        trials.append(trial.number)
+    active_trial: int | None = None
+    try:
+        for _ in range(count):
+            if cancel_check:
+                cancel_check()
+            trial = study.ask()
+            active_trial = trial.number
+            values: dict[str, Any] = {}
+            for parameter in spec.parameters:
+                if parameter.kind in {"categorical", "boolean"}:
+                    values[parameter.name] = trial.suggest_categorical(parameter.name, list(parameter.values))
+                elif parameter.kind == "integer":
+                    assert parameter.minimum is not None and parameter.maximum is not None
+                    values[parameter.name] = trial.suggest_int(
+                        parameter.name,
+                        int(parameter.minimum),
+                        int(parameter.maximum),
+                        log=parameter.log,
+                    )
+                else:
+                    assert parameter.minimum is not None and parameter.maximum is not None
+                    values[parameter.name] = trial.suggest_float(
+                        parameter.name,
+                        float(parameter.minimum),
+                        float(parameter.maximum),
+                        log=parameter.log,
+                    )
+            samples.append(values)
+            trials.append(trial.number)
+            active_trial = None
+    except Exception:
+        import optuna
+
+        if active_trial is not None:
+            study.tell(active_trial, state=optuna.trial.TrialState.FAIL)
+        for number in trials:
+            study.tell(number, state=optuna.trial.TrialState.FAIL)
+        raise
     return samples, trials
 
 
@@ -282,6 +367,7 @@ def sample_parameter_sets(
     *,
     count: int | None = None,
     optuna_study: Any | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> tuple[list[dict[str, Any]], list[int | None]]:
     """Sample parameter dictionaries with grid, Sobol, or adaptive search."""
     requested = spec.sample_count if count is None else int(count)
@@ -299,12 +385,156 @@ def sample_parameter_sets(
             raise ValueError(
                 f"Full factorial grid produces {len(samples)} candidates; change parameter levels instead of count"
             )
-        return samples, [None] * len(samples)
+        return _normalize_samples(spec, samples), [None] * len(samples)
     if spec.sampling_method == "sobol":
-        samples = _sobol_values(spec.parameters, requested, spec.seed)
+        samples = _normalize_samples(spec, _sobol_values(spec.parameters, requested, spec.seed))
         return samples, [None] * len(samples)
-    samples, trial_numbers = _adaptive_values(spec, requested, study=optuna_study)
-    return samples, list(trial_numbers)
+    if spec.sampling_method == "explicit":
+        if count is not None and requested != len(spec.explicit_candidates):
+            raise ValueError("Explicit sampling count is fixed by the candidates list")
+        return _normalize_samples(spec, list(spec.explicit_candidates)), [None] * len(spec.explicit_candidates)
+    samples, trial_numbers = _adaptive_values(spec, requested, study=optuna_study, cancel_check=cancel_check)
+    return _normalize_samples(spec, samples), list(trial_numbers)
+
+
+def _normalize_samples(
+    spec: StudySpec,
+    samples: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Validate candidate fields and round values before IDs and CFG writes."""
+    expected = {parameter.name for parameter in spec.parameters}
+    normalized: list[dict[str, Any]] = []
+    for index, sample in enumerate(samples):
+        missing = expected - set(sample)
+        extra = set(sample) - expected
+        if missing or extra:
+            details = []
+            if missing:
+                details.append("missing " + ", ".join(sorted(missing)))
+            if extra:
+                details.append("unknown " + ", ".join(sorted(extra)))
+            raise ValueError(f"Candidate {index} has " + "; ".join(details))
+        row: dict[str, Any] = {}
+        for parameter in spec.parameters:
+            value = sample[parameter.name]
+            if parameter.kind == "float":
+                if isinstance(value, bool):
+                    raise ValueError(f"Candidate {index} value for {parameter.name} must be numeric")
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise ValueError(f"Candidate {index} value for {parameter.name} must be numeric") from error
+                if not math.isfinite(numeric):
+                    raise ValueError(f"Candidate {index} value for {parameter.name} must be finite")
+                value = round(numeric, parameter.precision)
+                if parameter.minimum is not None and value < parameter.minimum:
+                    raise ValueError(f"Candidate {index} value for {parameter.name} is below its minimum")
+                if parameter.maximum is not None and value > parameter.maximum:
+                    raise ValueError(f"Candidate {index} value for {parameter.name} is above its maximum")
+                if parameter.kind == "float" and parameter.log and value <= 0:
+                    raise ValueError(f"Candidate {index} value for log parameter {parameter.name} must be positive")
+            elif parameter.kind == "integer":
+                if isinstance(value, bool):
+                    raise ValueError(f"Candidate {index} value for {parameter.name} must be an integer")
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise ValueError(f"Candidate {index} value for {parameter.name} must be an integer") from error
+                if not math.isfinite(numeric) or not numeric.is_integer():
+                    raise ValueError(f"Candidate {index} value for {parameter.name} must be an integer")
+                value = int(numeric)
+                if parameter.minimum is not None and value < parameter.minimum:
+                    raise ValueError(f"Candidate {index} value for {parameter.name} is below its minimum")
+                if parameter.maximum is not None and value > parameter.maximum:
+                    raise ValueError(f"Candidate {index} value for {parameter.name} is above its maximum")
+            elif parameter.kind == "boolean" and not isinstance(value, bool):
+                raise ValueError(f"Candidate {index} value for {parameter.name} must be boolean")
+            elif parameter.kind == "categorical" and value not in parameter.values:
+                raise ValueError(f"Candidate {index} value for {parameter.name} is not an allowed category")
+            row[parameter.name] = value
+        normalized.append(row)
+    return normalized
+
+
+def design_constraint_violations(
+    spec: StudySpec, values: dict[str, Any]
+) -> tuple[str, ...]:
+    """Return readable reasons when a sampled design fails hard feasibility rules.
+
+    A constraint compares ``left`` with either a numeric ``value`` or another
+    parameter named by ``right``. For example, ``{"left":
+    "nozzle_inlet_area_ratio", "operator": "<", "right":
+    "nozzle_exit_area_ratio"}``.
+    """
+    failures: list[str] = []
+    for constraint in spec.design_constraints:
+        left_name = str(constraint["left"])
+        if left_name not in values:
+            failures.append(f"{left_name} is unavailable for design constraint")
+            continue
+        right_name = str(constraint["right"]) if "right" in constraint else None
+        if right_name is not None and right_name not in values:
+            failures.append(f"{right_name} is unavailable for design constraint")
+            continue
+        left = values[left_name]
+        right = values[right_name] if right_name is not None else float(constraint["value"])
+        if isinstance(left, bool) or isinstance(right, bool):
+            passed = left == right if constraint["operator"] == "==" else False
+        else:
+            try:
+                left_number, right_number = float(left), float(right)
+                if not math.isfinite(left_number) or not math.isfinite(right_number):
+                    raise ValueError
+            except (TypeError, ValueError, OverflowError):
+                failures.append(f"{left_name} and its constraint target must be finite numbers")
+                continue
+            operator = constraint["operator"]
+            passed = {
+                "<": left_number < right_number,
+                "<=": left_number <= right_number,
+                "==": math.isclose(left_number, right_number, rel_tol=0.0, abs_tol=1e-9),
+                ">=": left_number >= right_number,
+                ">": left_number > right_number,
+            }[operator]
+        if not passed:
+            label = str(constraint.get("name") or f"{left_name} {constraint['operator']} {right_name or right}")
+            failures.append(label)
+    return tuple(failures)
+
+
+def preview_parameter_sets(
+    spec: StudySpec,
+    *,
+    count: int | None = None,
+) -> tuple[dict[str, Any], ...]:
+    """Pure preview; adaptive previews use seeded random draws without Optuna ask()."""
+    requested = spec.sample_count if count is None else int(count)
+    if requested < 1 or requested > spec.max_candidates:
+        raise ValueError(f"Requested preview count must be between 1 and {spec.max_candidates}")
+    if spec.sampling_method != "adaptive":
+        samples, _ = sample_parameter_sets(spec, count=count)
+        return tuple(samples)
+    rng = np.random.default_rng(spec.seed)
+    samples: list[dict[str, Any]] = []
+    for _ in range(requested):
+        row: dict[str, Any] = {}
+        for parameter in spec.parameters:
+            if parameter.kind in {"categorical", "boolean"}:
+                row[parameter.name] = parameter.values[int(rng.integers(len(parameter.values)))]
+            elif parameter.kind == "integer":
+                assert parameter.minimum is not None and parameter.maximum is not None
+                row[parameter.name] = int(rng.integers(int(parameter.minimum), int(parameter.maximum) + 1))
+            else:
+                assert parameter.minimum is not None and parameter.maximum is not None
+                low, high = float(parameter.minimum), float(parameter.maximum)
+                u = float(rng.random())
+                row[parameter.name] = (
+                    math.exp(math.log(low) + u * (math.log(high) - math.log(low)))
+                    if parameter.log
+                    else low + u * (high - low)
+                )
+        samples.append(row)
+    return tuple(_normalize_samples(spec, samples))
 
 
 def _lookup(data: dict[str, Any], path: tuple[str, ...]) -> Any:
@@ -385,11 +615,39 @@ def generate_candidate_cfgs(
     *,
     count: int | None = None,
     optuna_study: Any | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> tuple[GeneratedCandidate, ...]:
     """Write sampled, uniquely named RPA4 CFG files and candidate manifests."""
     base = json.loads(spec.base_cfg.read_text(encoding="utf-8"))
     parameter_units = _resolved_parameter_units(base, spec.parameters)
-    samples, trial_numbers = sample_parameter_sets(spec, count=count, optuna_study=optuna_study)
+    if cancel_check:
+        cancel_check()
+    samples, trial_numbers = sample_parameter_sets(
+        spec, count=count, optuna_study=optuna_study, cancel_check=cancel_check
+    )
+    feasible: list[tuple[dict[str, Any], int | None]] = []
+    exclusions: list[dict[str, Any]] = []
+    for values, trial_number in zip(samples, trial_numbers, strict=True):
+        violations = design_constraint_violations(spec, values)
+        if violations:
+            exclusions.append({"parameters": values, "reasons": list(violations), "optuna_trial_number": trial_number})
+        else:
+            feasible.append((values, trial_number))
+    _atomic_write_text(
+        spec.output_dir / spec.study_id / "feasibility-exclusions.json",
+        json.dumps({"schema_version": SCHEMA_VERSION, "excluded": exclusions}, indent=2) + "\n",
+    )
+    if exclusions:
+        if spec.sampling_method == "adaptive":
+            import optuna
+
+            study = optuna_study or _optuna_study(spec)
+            for item in exclusions:
+                number = item.get("optuna_trial_number")
+                if number is not None:
+                    study.tell(int(number), state=optuna.trial.TrialState.FAIL)
+    samples = [item[0] for item in feasible]
+    trial_numbers = [item[1] for item in feasible]
     root = spec.output_dir / spec.study_id / "candidates"
     root.mkdir(parents=True, exist_ok=True)
     existing_ids = {
@@ -412,6 +670,8 @@ def generate_candidate_cfgs(
     generated: list[GeneratedCandidate] = []
     seen_samples: set[str] = set()
     for values, trial_number in zip(samples, trial_numbers, strict=True):
+        if cancel_check:
+            cancel_check()
         canonical_values = json.dumps(values, sort_keys=True, separators=(",", ":"), default=str)
         fingerprint = hashlib.sha256(canonical_values.encode("utf-8")).hexdigest()[:12]
         if trial_number is None and fingerprint in seen_samples:
@@ -435,6 +695,7 @@ def generate_candidate_cfgs(
         manifest_path = directory / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
         manifest.update({
+            "schema_version": SCHEMA_VERSION,
             "study_id": spec.study_id,
             "candidate_id": candidate_id,
             "case_name": case_name,
@@ -471,6 +732,8 @@ def _candidate_directories(spec: StudySpec) -> tuple[Path, ...]:
 def screen_study_candidates(
     spec: StudySpec,
     candidates: tuple[GeneratedCandidate, ...] | None = None,
+    *,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Run enabled ideal CEA and configured Cantera screening models."""
     from rocket_analysis.rpa4_validation import load_rpa4_inputs
@@ -503,8 +766,17 @@ def screen_study_candidates(
             reference_props.get("oxidizer", {}).get("temperature_k", 90.2),
         )
     )
+    chamber_contraction_default = reference_values.get("geometry", {}).get("contraction_ratio")
+    finite_area_chamber = bool(
+        cea_spec.get("finite_area_chamber", chamber_contraction_default is not None)
+    )
+    chamber_contraction_area_ratio = cea_spec.get(
+        "chamber_contraction_area_ratio", chamber_contraction_default
+    )
     outcomes: dict[str, dict[str, Any]] = {}
     for directory in directories:
+        if cancel_check:
+            cancel_check()
         manifest_path = directory / "manifest.json"
         if not manifest_path.is_file():
             continue
@@ -534,6 +806,12 @@ def screen_study_candidates(
                         ),
                         fuel_name=str(cea_spec.get("fuel_name", "RP-1")),
                         oxidizer_name=str(cea_spec.get("oxidizer_name", "O2(L)")),
+                        finite_area_chamber=finite_area_chamber,
+                        chamber_contraction_area_ratio=(
+                            float(chamber_contraction_area_ratio)
+                            if chamber_contraction_area_ratio is not None
+                            else None
+                        ),
                     )
                     screening["cea"] = {"status": "completed", "result": result.to_dict()}
                 except Exception as error:
@@ -581,6 +859,8 @@ def stage_rpa4_candidates(
     spec: StudySpec,
     shared_dir: str | Path | None = None,
     candidates: tuple[GeneratedCandidate, ...] | None = None,
+    *,
+    cancel_check: Callable[[], None] | None = None,
 ) -> tuple[Path, ...]:
     """Copy CFGs and manifests into per-case folders on the RPA4 share."""
     configured = shared_dir if shared_dir is not None else os.environ.get("RPA4_SHARED_DIR")
@@ -595,21 +875,54 @@ def stage_rpa4_candidates(
     )
     staged: list[Path] = []
     for directory in directories:
+        if cancel_check:
+            cancel_check()
         manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        violations = design_constraint_violations(spec, manifest.get("parameters", {}))
+        if violations:
+            raise ValueError(
+                f"Candidate {manifest.get('candidate_id')} is infeasible and cannot be staged: "
+                + ", ".join(violations)
+            )
         case_dir = root / str(manifest["case_name"])
+        existing_manifest_path = case_dir / "manifest.json"
+        if existing_manifest_path.is_file():
+            try:
+                existing_manifest = json.loads(existing_manifest_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as error:
+                raise ValueError(f"Existing staged manifest is invalid: {existing_manifest_path}") from error
+            if existing_manifest.get("candidate_id") != manifest.get("candidate_id"):
+                raise FileExistsError(
+                    f"RPA4 case name {manifest['case_name']!r} is already assigned to candidate "
+                    f"{existing_manifest.get('candidate_id')!r}"
+                )
         case_dir.mkdir(parents=True, exist_ok=True)
-        for filename in (manifest.get("config_file", "candidate.cfg"), "manifest.json", "screening.json"):
+        for filename in (manifest.get("config_file", "candidate.cfg"), "screening.json"):
             source = directory / filename
             if not source.is_file():
                 continue
             destination = case_dir / filename
             contents = source.read_bytes()
-            if destination.exists() and destination.read_bytes() != contents and destination.suffix.casefold() == ".cfg":
-                raise FileExistsError(f"A different RPA4 candidate CFG is already staged: {destination}")
+            if destination.exists() and destination.suffix.casefold() == ".cfg":
+                try:
+                    existing_cfg = json.loads(destination.read_text(encoding="utf-8"))
+                    staged_cfg = json.loads(contents.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise ValueError(f"Staged CFG is not valid RPA4 JSON: {destination}") from error
+                if existing_cfg != staged_cfg:
+                    raise FileExistsError(
+                        f"A semantically different RPA4 CFG is already staged: {destination}. "
+                        "Resolve the existing file before replacing it."
+                    )
+                continue
             if not destination.exists() or destination.read_bytes() != contents:
                 temporary = destination.with_name(destination.name + ".tmp")
                 temporary.write_bytes(contents)
                 os.replace(temporary, destination)
+        manifest["status"] = "sent"
+        manifest["sent_at"] = datetime.now(timezone.utc).isoformat()
+        _atomic_write_text(directory / "manifest.json", json.dumps(manifest, indent=2) + "\n")
+        _atomic_write_text(case_dir / "manifest.json", json.dumps(manifest, indent=2) + "\n")
         staged.append(case_dir)
     return tuple(staged)
 
@@ -624,7 +937,9 @@ def _optuna_study(spec: StudySpec):
     study_dir = spec.output_dir / spec.study_id
     study_dir.mkdir(parents=True, exist_ok=True)
     storage = f"sqlite:///{(study_dir / 'optuna.sqlite3').as_posix()}"
-    sampler = optuna.samplers.NSGAIISampler(seed=spec.seed)
+    sampler = optuna.samplers.NSGAIISampler(
+        seed=spec.seed, population_size=spec.population_size
+    )
     try:
         study = optuna.load_study(study_name=spec.study_id, storage=storage, sampler=sampler)
     except KeyError:
@@ -647,83 +962,39 @@ def _optuna_study(spec: StudySpec):
 def import_shared_rpa4_results(
     spec: StudySpec,
     shared_dir: str | Path | None = None,
+    *,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
-    """Import completed reports from RPA4_SHARED_DIR and persist their metrics."""
-    from rocket_analysis.ranking import candidate_metric_catalog
-    from rocket_analysis.shared import load_shared_rpa4_cases
+    """Import returned PDFs, archive their hashes, and complete adaptive trials."""
+    from rocket_analysis.bundles import scan_returns
 
-    cases = load_shared_rpa4_cases(shared_dir, allow_incomplete=True)
-    directories = _candidate_directories(spec)
-    manifest_by_case: dict[str, tuple[Path, dict[str, Any]]] = {}
-    for directory in directories:
-        manifest_path = directory / "manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest_by_case[str(manifest["case_name"]).strip().casefold()] = (directory, manifest)
-    results_path = spec.output_dir / spec.study_id / "rpa4-results.json"
-    previous = json.loads(results_path.read_text(encoding="utf-8")) if results_path.exists() else {}
-    by_id = {row["candidate_id"]: row for row in previous.get("results", [])}
-    imported: list[str] = []
-    ignored: list[str] = []
+    scan = scan_returns(spec, shared_dir, cancel_check=cancel_check)
+    results_path = scan.results_path
+    payload = json.loads(results_path.read_text(encoding="utf-8"))
     adaptive_study = _optuna_study(spec) if spec.sampling_method == "adaptive" else None
-    for case in cases:
-        matched = manifest_by_case.get(case.case_name.strip().casefold())
-        if matched is None:
-            ignored.append(case.case_name)
-            continue
-        directory, manifest = matched
-        candidate_id = str(manifest["candidate_id"])
-        screening_path = directory / "screening.json"
-        screening = json.loads(screening_path.read_text(encoding="utf-8")) if screening_path.exists() else {}
-        metrics = candidate_metric_catalog(
-            case.report_values,
-            screening,
-            design_parameters=manifest.get("parameters", {}),
-            design_units=manifest.get("parameter_units", {}),
-        )
-        validation_status = str(case.validation.get("status", "unknown"))
-        row = {
-            "study_id": spec.study_id,
-            "candidate_id": candidate_id,
-            "case_name": case.case_name,
-            "parameters": manifest.get("parameters", {}),
-            "optuna_trial_number": manifest.get("optuna_trial_number"),
-            "validation_status": validation_status,
-            "validation": case.validation,
-            "config_path": str(case.config_path),
-            "report_path": str(case.report_path),
-            "report_values": case.report_values,
-            "screening": screening,
-            "metrics": metrics,
-        }
-        by_id[candidate_id] = row
-        imported.append(candidate_id)
-        manifest["status"] = "rpa4_imported"
-        manifest["validation_status"] = validation_status
-        _atomic_write_text(directory / "manifest.json", json.dumps(manifest, indent=2) + "\n")
-        if adaptive_study is not None and manifest.get("optuna_trial_number") is not None:
-            trial_number = int(manifest["optuna_trial_number"])
+    if adaptive_study is not None:
+        rows_by_id = {row["candidate_id"]: row for row in payload.get("results", [])}
+        for candidate_id in scan.imported_candidate_ids:
+            if cancel_check:
+                cancel_check()
+            row = rows_by_id.get(candidate_id)
+            if row is None or row.get("optuna_trial_number") is None:
+                continue
+            trial_number = int(row["optuna_trial_number"])
             trial = next(
-                (trial for trial in adaptive_study.get_trials(deepcopy=False) if trial.number == trial_number),
+                (item for item in adaptive_study.get_trials(deepcopy=False) if item.number == trial_number),
                 None,
             )
-            if trial is not None and trial.state.name == "RUNNING":
-                objective_specs = spec.ranking.get("objectives", DEFAULT_OBJECTIVES)
-                objective_values = [metrics.get(str(item["metric"])) for item in objective_specs]
-                if validation_status == "mismatch" or any(value is None for value in objective_values):
-                    import optuna
+            if trial is None or trial.state.name != "RUNNING":
+                continue
+            objectives = spec.ranking.get("objectives", DEFAULT_OBJECTIVES)
+            values = [row["metrics"].get(str(item["metric"])) for item in objectives]
+            if row.get("validation_status") == "mismatch" or any(value is None for value in values):
+                import optuna
 
-                    adaptive_study.tell(trial_number, state=optuna.trial.TrialState.FAIL)
-                else:
-                    adaptive_study.tell(trial_number, values=[float(value) for value in objective_values])
-
-    payload = {
-        "study_id": spec.study_id,
-        "sampling_method": spec.sampling_method,
-        "results": sorted(by_id.values(), key=lambda row: row["candidate_id"]),
-        "last_imported_candidate_ids": imported,
-        "ignored_shared_case_names": ignored,
-    }
-    _atomic_write_text(results_path, json.dumps(payload, indent=2) + "\n")
+                adaptive_study.tell(trial_number, state=optuna.trial.TrialState.FAIL)
+            else:
+                adaptive_study.tell(trial_number, values=[float(value) for value in values])
     return payload
 
 
@@ -785,5 +1056,6 @@ def save_study_ranking(spec: StudySpec, ranking: RankingResult) -> Path:
     from dataclasses import asdict
 
     path = spec.output_dir / spec.study_id / "ranking.json"
-    _atomic_write_text(path, json.dumps(asdict(ranking), indent=2) + "\n")
+    payload = {"schema_version": SCHEMA_VERSION, **asdict(ranking)}
+    _atomic_write_text(path, json.dumps(payload, indent=2) + "\n")
     return path

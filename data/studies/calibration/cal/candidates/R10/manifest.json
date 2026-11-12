@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R10",
+    "case_name":  "cal-R10",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "chamber_length":  1020.0
+                   },
+    "parameter_units":  {
+                            "chamber_length":  "mm"
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "chamber length 1020 WITH units key",
+    "priority":  3,
+    "cfg_sha256":  "991d61a11886383e603dc3ed01350d46e5cdc8247f526ef1a719d89d635f4c8f",
+    "schema_version":  1
+}

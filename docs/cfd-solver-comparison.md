@@ -24,4 +24,10 @@ Use OpenFOAM 2512 as the first CFD integration target. Ubuntu 24.04 WSL2 has the
 
 The copied tutorial's `system/controlDict` is set to `endTime 0.4` for a practical installation smoke run. Its `Allrun` completed through simulated time 0.4, wrote the `End` marker in `log.reactingFoam`, and completed `reconstructPar` with exit status 0. The Python WSL wrapper was separately invoked from `rocket-dev` against a minimal WSL `Allrun` script and returned successfully. The project includes helpers to select a small top-ranked finalist set and prepare copies of a supplied OpenFOAM template. The template must define the geometry, mesh, thermochemistry, and boundary conditions; the toolkit does not synthesize these inputs from RPA4 values.
 
+On Windows, finalist case destinations must be WSL UNC paths such as
+`\\wsl$\Ubuntu-24.04\home\rocket\OpenFOAM\cases\candidate`. Case preparation
+copies to a temporary sibling directory and renames it into place after all
+template substitutions succeed. Running a prepared case accepts that UNC path
+and resolves it to a Linux path inside the selected distribution.
+
 These checks establish that the environment, solver launch path, and basic result-ingestion package work. They do not validate the tutorial's flow against the RPA4 report or validate an RPA4 reconstruction. The report identifies RP-1/O2(L) and chamber pressure, but a reacting CFD comparison also needs a suitable RP-1 surrogate, mechanism, injector/outlet conditions, wall treatment, and mesh/convergence evidence. CFD results should remain finalist comparisons until those inputs are defined.

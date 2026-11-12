@@ -11,7 +11,10 @@ optuna
 pandas
 pdfplumber
 pint
+pyqtgraph
 pyvista
+pyside6
 pytest
 scipy
+watchdog
 pip

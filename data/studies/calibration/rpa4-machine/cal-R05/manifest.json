@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R05",
+    "case_name":  "cal-R05",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "ambient_pressure_point_count":  10
+                   },
+    "parameter_units":  {
+                            "ambient_pressure_point_count":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "ambient numberOfPoints 10",
+    "priority":  1,
+    "cfg_sha256":  "0ef54722133d61a1d5f753351e83a0d7aa2b9fcc5a97766110c37d5135cb7817",
+    "schema_version":  1
+}

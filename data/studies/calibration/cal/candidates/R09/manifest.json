@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R09",
+    "case_name":  "cal-R09",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "throat_diameter":  4.0
+                   },
+    "parameter_units":  {
+                            "throat_diameter":  "in"
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "throat diameter 4 in",
+    "priority":  2,
+    "cfg_sha256":  "07c34073e53fe1588e87d4998c73acc23e0e6f0e0b5f65db31a03c97b8e700cb",
+    "schema_version":  1
+}

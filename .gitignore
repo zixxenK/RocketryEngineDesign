@@ -12,3 +12,13 @@ out/
 __main___out/
 .idea/
 *.log
+data/studies/runs/
+*.sqlite3
+data/studies/calibration/cal/imports/
+data/studies/calibration/cal/inbox/
+data/studies/calibration/cal/rpa4-results.json
+data/studies/calibration/cal/ranking.json
+data/studies/calibration/cal/feasibility-exclusions.json
+data/studies/calibration/cal/candidates/candidate-*/
+data/studies/calibration/cal/candidates/trial-*/
+data/studies/calibration/cal/candidates/R*/screening.json

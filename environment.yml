@@ -15,10 +15,13 @@ dependencies:
   - pandas
   - pdfplumber
   - pint
+  - pyqtgraph
   - pyvista
+  - pyside6
   - scipy
+  - watchdog
   - pip
   - pytest
   - pip:
       - jupyter-book>=2.0.0
-      - -e .
+      - -e .[desktop]

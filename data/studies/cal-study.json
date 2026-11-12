@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "study_id": "cal",
+  "base_cfg": "../reference/Test6in.cfg",
+  "output_dir": "calibration",
+  "note": "Calibration study. Candidates are PRE-STAGED one-at-a-time variants. max_candidates=20 makes generate_candidate_cfgs refuse the 256-point grid these ranges would otherwise expand to. Use only for import and rank.",
+  "parameters": {
+    "mixture_ratio": {
+      "kind": "float",
+      "min": 1.5,
+      "max": 2.3,
+      "levels": 2
+    },
+    "nozzle_inlet_area_ratio": {
+      "kind": "float",
+      "min": 2,
+      "max": 15,
+      "levels": 2
+    },
+    "nozzle_exit_area_ratio": {
+      "kind": "float",
+      "min": 10,
+      "max": 19.74,
+      "levels": 2
+    },
+    "chamber_length": {
+      "kind": "float",
+      "min": 1020,
+      "max": 1200,
+      "levels": 2,
+      "unit": "mm"
+    },
+    "throat_diameter": {
+      "kind": "float",
+      "min": 4,
+      "max": 6,
+      "levels": 2,
+      "unit": "in"
+    },
+    "ambient_pressure_point_count": {
+      "kind": "integer",
+      "min": 10,
+      "max": 30,
+      "levels": 2
+    },
+    "equilibrium_flow_shifting": {
+      "kind": "boolean"
+    },
+    "multiphase": {
+      "kind": "boolean"
+    }
+  },
+  "sampling": {
+    "method": "grid",
+    "count": 13,
+    "seed": 1,
+    "max_candidates": 20
+  },
+  "analysis": {
+    "cea": {
+      "enabled": false
+    },
+    "cantera": {
+      "enabled": false
+    }
+  },
+  "ranking": {
+    "mode": "pareto",
+    "objectives": [
+      {
+        "metric": "estimated_delivered.sea_level.specific_impulse_s",
+        "direction": "maximize"
+      },
+      {
+        "metric": "derived.characteristic_velocity_efficiency",
+        "direction": "maximize"
+      },
+      {
+        "metric": "estimated_delivered.sea_level.thrust_coefficient",
+        "direction": "maximize"
+      }
+    ],
+    "constraints": []
+  }
+}

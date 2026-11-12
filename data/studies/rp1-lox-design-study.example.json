@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "study_id": "rp1-lox-design-study-example",
   "base_cfg": "../reference/Test6in.cfg",
   "output_dir": "runs",
@@ -42,10 +43,20 @@
     "seed": 3417,
     "max_candidates": 1000
   },
+  "design_constraints": [
+    {
+      "name": "nozzle inlet area ratio below exit area ratio",
+      "left": "nozzle_inlet_area_ratio",
+      "operator": "<",
+      "right": "nozzle_exit_area_ratio"
+    }
+  ],
   "analysis": {
     "cea": {
       "enabled": true,
       "reference_pdf": "../reference/test1-6in-of-1.5.pdf",
+      "finite_area_chamber": true,
+      "chamber_contraction_area_ratio": 6.0,
       "fuel_name": "RP-1",
       "oxidizer_name": "O2(L)"
     },
@@ -65,14 +76,19 @@
     "mode": "pareto",
     "objectives": [
       {
-        "metric": "estimated_delivered.sea_level.thrust_kN",
+        "metric": "estimated_delivered.sea_level.specific_impulse_s",
         "direction": "maximize"
       },
       {
-        "metric": "estimated_delivered.sea_level.specific_impulse_s",
+        "metric": "derived.characteristic_velocity_efficiency",
+        "direction": "maximize"
+      },
+      {
+        "metric": "estimated_delivered.sea_level.thrust_coefficient",
         "direction": "maximize"
       }
     ],
-    "constraints": []
+    "constraints": [],
+    "note": "Add delivered thrust as a target constraint after the hot-fire test-stand target is defined."
   }
 }

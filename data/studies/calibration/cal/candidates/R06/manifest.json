@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R06",
+    "case_name":  "cal-R06",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "mixture_ratio":  2.3
+                   },
+    "parameter_units":  {
+                            "mixture_ratio":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "O/F 2.3",
+    "priority":  2,
+    "cfg_sha256":  "8c354411d371a30ee7f5196d8c3c36e7accf1b52a039b765bd1c7da416bee013",
+    "schema_version":  1
+}

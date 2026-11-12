@@ -1,0 +1,19 @@
+{
+    "study_id":  "cal",
+    "candidate_id":  "R04",
+    "case_name":  "cal-R04",
+    "status":  "awaiting_rpa4",
+    "parameters":  {
+                       "equilibrium_flow_shifting":  true
+                   },
+    "parameter_units":  {
+                            "equilibrium_flow_shifting":  null
+                        },
+    "optuna_trial_number":  null,
+    "config_file":  "candidate.cfg",
+    "expected_report_file":  "candidate.pdf",
+    "label":  "equilibrium shifting true",
+    "priority":  1,
+    "cfg_sha256":  "626ef24ee695b01e6735b571edcf1f83f6fee9e0f7c834d3b1b75965be428573",
+    "schema_version":  1
+}

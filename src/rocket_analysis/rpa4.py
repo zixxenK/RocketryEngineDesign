@@ -133,13 +133,30 @@ def _propellant_component(section: str, name: str) -> dict[str, Any]:
 
 
 def _performance_rows(section: str) -> list[list[float]]:
-    """Return numeric rows from the altitude performance table."""
+    """Return numeric rows from the altitude performance table.
+
+    Do not impose an altitude or pressure ceiling: valid sweeps can include
+    higher altitudes and very low pressures.
+    """
     rows: list[list[float]] = []
     for line in section.splitlines():
         values = [float(value) for value in _NUMBER.findall(line)]
-        if len(values) >= 6 and 0.0 <= values[0] <= 20.0 and 0.0 <= values[1] <= 1.1:
+        if len(values) >= 6 and values[0] >= 0.0 and values[1] >= 0.0:
             rows.append(values[:6])
     return rows
+
+
+def _condensed_mass_fractions(section: str) -> list[float] | None:
+    """Extract condensed propellant mass fraction at the four stations."""
+    for line in section.splitlines():
+        match = re.search(r"\bCondense", line, flags=re.IGNORECASE)
+        if not match:
+            continue
+        values = [float(value) for value in _NUMBER.findall(line[match.end() :])]
+        # RPA4 prints mass/mole fractions for injector, inlet, throat, and exit.
+        if len(values) >= 8:
+            return [values[index] for index in (0, 2, 4, 6)]
+    return None
 
 
 def parse_report_values(path: str | Path) -> dict[str, Any]:
@@ -152,6 +169,7 @@ def parse_report_values(path: str | Path) -> dict[str, Any]:
         text, "Table 5. Estimated Delivered Performance", "Table 6."
     )
     products = _table_section(text, "Table 3. Combustion Products", "Table 4.")
+    condensed_mass_fractions = _condensed_mass_fractions(products)
     geometry = _table_section(text, "Table 8. Chamber Size", "Table 9.")
     altitude = _table_section(text, "Table 6. Altitude Performance", "Table 7.")
     flow_start = text.casefold().find("mass flow rate")
@@ -180,8 +198,8 @@ def parse_report_values(path: str | Path) -> dict[str, Any]:
             "gamma": _row_numbers(station_section, "Gamma", 4),
             "molecular_weight": _row_numbers(station_section, "Molecular weight", 4),
         },
-        "condensed_fraction_reported": "condensedfraction"
-        in re.sub(r"[^a-z]", "", products.casefold()),
+        "condensed_fraction_reported": condensed_mass_fractions is not None,
+        "condensed_mass_fraction_by_station": condensed_mass_fractions,
         "ideal": _table_performance(ideal),
         "estimated_delivered": _table_performance(delivered),
         "total_mass_flow_kg_s": _row_numbers(flow_section, "Mass flow rate", 1)[0],

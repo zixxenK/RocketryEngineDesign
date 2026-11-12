@@ -25,7 +25,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+desktop = ["PySide6>=6.8", "pyqtgraph>=0.13.7", "watchdog>=6.0"]
+dev = ["pytest", "pytest-qt", "hypothesis"]
+
+[project.scripts]
+rocket-study = "rocket_analysis.cli:main"
+rocket-study-desktop = "rocket_analysis.desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+  "requires_cea: requires the NASA CEA package and its data files",
+  "requires_cantera: requires Cantera and a configured mechanism",
+]

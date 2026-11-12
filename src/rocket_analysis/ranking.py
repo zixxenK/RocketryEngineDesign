@@ -9,8 +9,9 @@ from typing import Any
 
 
 DEFAULT_OBJECTIVES = (
-    {"metric": "estimated_delivered.sea_level.thrust_kN", "direction": "maximize"},
     {"metric": "estimated_delivered.sea_level.specific_impulse_s", "direction": "maximize"},
+    {"metric": "derived.characteristic_velocity_efficiency", "direction": "maximize"},
+    {"metric": "estimated_delivered.sea_level.thrust_coefficient", "direction": "maximize"},
 )
 _OPERATING_POINTS = ("sea_level", "optimum_expansion", "vacuum")
 _PERFORMANCE_SERIES = {
@@ -47,6 +48,7 @@ class RankingResult:
     entries: tuple[RankingEntry, ...]
     exclusions: tuple[RankingExclusion, ...]
     normalization: str
+    constraints: tuple[dict[str, Any], ...] = ()
 
     @property
     def top_ranked(self) -> tuple[RankingEntry, ...]:
@@ -113,14 +115,58 @@ def report_metric_catalog(report_values: dict[str, Any]) -> dict[str, float]:
     return metrics
 
 
+def derived_report_metric_catalog(
+    report_values: dict[str, Any],
+    *,
+    separation_pressure_ratio_limit: float | None = None,
+) -> dict[str, float]:
+    """Calculate explicitly labeled ratios and report-derived indicators."""
+    derived: dict[str, float] = {}
+    ideal = report_values.get("ideal", {})
+    delivered = report_values.get("estimated_delivered", {})
+    ideal_cstar = ideal.get("characteristic_velocity_m_s")
+    delivered_cstar = delivered.get("characteristic_velocity_m_s")
+    if isinstance(ideal_cstar, (int, float)) and float(ideal_cstar) > 0:
+        if isinstance(delivered_cstar, (int, float)):
+            derived["derived.characteristic_velocity_efficiency"] = (
+                float(delivered_cstar) / float(ideal_cstar)
+            )
+
+    station_pressure = report_values.get("station_conditions", {}).get("pressure_mpa", [])
+    ambient_atm = delivered.get("ambient_pressure_atm", [])
+    if station_pressure and ambient_atm:
+        exit_pressure = float(station_pressure[-1])
+        sea_level_pressure_mpa = float(ambient_atm[0]) * 0.101325
+        if sea_level_pressure_mpa > 0:
+            ratio = exit_pressure / sea_level_pressure_mpa
+            derived["derived.sea_level_exit_pressure_ratio"] = ratio
+            if separation_pressure_ratio_limit is not None:
+                limit = float(separation_pressure_ratio_limit)
+                if not math.isfinite(limit) or limit <= 0:
+                    raise ValueError("separation_pressure_ratio_limit must be finite and positive")
+                derived["derived.separation_risk_flag"] = float(ratio < limit)
+
+    condensed = report_values.get("condensed_mass_fraction_by_station")
+    if isinstance(condensed, list) and len(condensed) >= 4:
+        derived["derived.exit_condensed_mass_fraction"] = float(condensed[3])
+    return derived
+
+
 def candidate_metric_catalog(
     report_values: dict[str, Any],
     screening_values: dict[str, Any] | None = None,
     design_parameters: dict[str, Any] | None = None,
     design_units: dict[str, str | None] | None = None,
+    separation_pressure_ratio_limit: float | None = None,
 ) -> dict[str, float]:
     """Return design, report, and screening metrics with separate namespaces."""
     metrics = report_metric_catalog(report_values)
+    metrics.update(
+        derived_report_metric_catalog(
+            report_values,
+            separation_pressure_ratio_limit=separation_pressure_ratio_limit,
+        )
+    )
 
     def add_numeric(prefix: str, values: Any) -> None:
         if isinstance(values, dict):
@@ -293,7 +339,7 @@ def rank_metric_rows(
         )
 
     if not eligible:
-        return RankingResult(mode, objectives, weights, (), tuple(exclusions), "none")
+        return RankingResult(mode, objectives, weights, (), tuple(exclusions), "none", constraints)
 
     scores: list[float | None] = [None] * len(eligible)
     if mode == "pareto":
@@ -339,4 +385,4 @@ def rank_metric_rows(
         )
         for index in ordered
     )
-    return RankingResult(mode, objectives, weights, entries, tuple(exclusions), normalization)
+    return RankingResult(mode, objectives, weights, entries, tuple(exclusions), normalization, constraints)
