@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rocket-analysis-toolkit"
+version = "0.1.0"
+description = "Unit-aware rocket propulsion analysis and RPA4/CFD result comparison tools"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "cea>=3.3.4",
+  "cantera",
+  "fluids",
+  "matplotlib",
+  "meshio",
+  "numpy",
+  "openmdao>=3.45",
+  "optuna>=5.0",
+  "pandas",
+  "pdfplumber",
+  "pint",
+  "pyvista",
+  "scipy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

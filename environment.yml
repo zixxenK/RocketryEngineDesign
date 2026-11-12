@@ -1,0 +1,24 @@
+name: rocket-dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - cantera
+  - fluids
+  - ipykernel
+  - jupyterlab
+  - matplotlib
+  - meshio
+  - numpy
+  - openmdao
+  - optuna
+  - pandas
+  - pdfplumber
+  - pint
+  - pyvista
+  - scipy
+  - pip
+  - pytest
+  - pip:
+      - jupyter-book>=2.0.0
+      - -e .

@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.jupyter/
+.conda/
+.venv/
+build/
+dist/
+out/
+__main___out/
+.idea/
+*.log

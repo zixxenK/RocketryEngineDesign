@@ -1,0 +1,78 @@
+{
+  "study_id": "rp1-lox-design-study-example",
+  "base_cfg": "../reference/Test6in.cfg",
+  "output_dir": "runs",
+  "parameters": {
+    "mixture_ratio": {
+      "kind": "float",
+      "min": 1.2,
+      "max": 1.8,
+      "levels": 7
+    },
+    "chamber_pressure": {
+      "kind": "float",
+      "min": 1.5,
+      "max": 2.5,
+      "levels": 5,
+      "unit": "MPa"
+    },
+    "throat_diameter": {
+      "kind": "float",
+      "min": 140,
+      "max": 165,
+      "levels": 4,
+      "unit": "mm"
+    },
+    "nozzle_exit_area_ratio": {
+      "kind": "float",
+      "min": 16,
+      "max": 24,
+      "levels": 5
+    },
+    "nozzle_inlet_area_ratio": {
+      "kind": "float",
+      "min": 2,
+      "max": 15,
+      "levels": 5
+    }
+  },
+  "sampling": {
+    "method": "sobol",
+    "count": 32,
+    "seed": 3417,
+    "max_candidates": 1000
+  },
+  "analysis": {
+    "cea": {
+      "enabled": true,
+      "reference_pdf": "../reference/test1-6in-of-1.5.pdf",
+      "fuel_name": "RP-1",
+      "oxidizer_name": "O2(L)"
+    },
+    "cantera": {
+      "enabled": false,
+      "mechanism": null,
+      "fuel_species_mass_fractions": null,
+      "oxidizer_species_mass_fractions": null,
+      "note": "Choose and validate an RP-1 surrogate and matching species in the selected mechanism before enabling."
+    },
+    "openfoam": {
+      "stage": "finalists_only",
+      "requires_user_case_template": true
+    }
+  },
+  "ranking": {
+    "mode": "pareto",
+    "objectives": [
+      {
+        "metric": "estimated_delivered.sea_level.thrust_kN",
+        "direction": "maximize"
+      },
+      {
+        "metric": "estimated_delivered.sea_level.specific_impulse_s",
+        "direction": "maximize"
+      }
+    ],
+    "constraints": []
+  }
+}

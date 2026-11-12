@@ -1,0 +1,240 @@
+{
+  "config_file": "Test6in.cfg",
+  "report_file": "test1-6in-of-1.5.pdf",
+  "validation_scope": "CFG-to-report input consistency and report internal checks; no RPA 4 solver rerun",
+  "status": "review_required",
+  "counts": {
+    "match": 27,
+    "mismatch": 0,
+    "review": 4,
+    "unavailable": 1
+  },
+  "checks": [
+    {
+      "field": "case name",
+      "configured": "test 1",
+      "reported": "test 1",
+      "status": "match"
+    },
+    {
+      "field": "fuel identity",
+      "configured": "RP-1",
+      "reported": "RP-1",
+      "status": "match"
+    },
+    {
+      "field": "fuel blend fractions sum",
+      "configured": 1.0,
+      "reported": 1.0,
+      "status": "match"
+    },
+    {
+      "field": "oxidizer identity",
+      "configured": "O2(L)",
+      "reported": "O2(L)",
+      "status": "match"
+    },
+    {
+      "field": "oxidizer blend fractions sum",
+      "configured": 1.0,
+      "reported": 1.0,
+      "status": "match"
+    },
+    {
+      "field": "mixture ratio O/F",
+      "configured": 1.5,
+      "reported": 1.5,
+      "status": "match"
+    },
+    {
+      "field": "reported mass-flow O/F",
+      "configured": 1.4999945203677927,
+      "reported": 1.5,
+      "status": "match"
+    },
+    {
+      "field": "fuel share of total propellant mass",
+      "configured": 0.4,
+      "reported": 0.4,
+      "status": "match"
+    },
+    {
+      "field": "oxidizer share of total propellant mass",
+      "configured": 0.6,
+      "reported": 0.6,
+      "status": "match"
+    },
+    {
+      "field": "chamber pressure (MPa)",
+      "configured": 2.0,
+      "reported": 2.0,
+      "status": "match"
+    },
+    {
+      "field": "throat diameter (mm)",
+      "configured": 152.39999999999998,
+      "reported": 152.4,
+      "status": "match"
+    },
+    {
+      "field": "nozzle inlet area ratio",
+      "configured": 14.43,
+      "reported": 6.0,
+      "status": "review",
+      "note": "Numeric difference: CFG nozzleConditions.nozzleInletConditions.areaRatio is compared with Table 2 Nozzle inlet A/At. The supplied files do not establish whether RPA4 maps these fields to the same calculation station. Sweep the CFG input if desired, but do not use this PDF station value as a direct equality gate."
+    },
+    {
+      "field": "nozzle exit area ratio",
+      "configured": 19.74,
+      "reported": 19.74,
+      "status": "match"
+    },
+    {
+      "field": "chamber contraction ratio",
+      "configured": 6.0,
+      "reported": 6.0,
+      "status": "match",
+      "note": "Internal report check: chamber Ac/At versus injector station area ratio."
+    },
+    {
+      "field": "chamber length",
+      "configured": 1020.0,
+      "reported": 1020.0,
+      "status": "review",
+      "note": "Numeric values agree, but the CFG does not specify a unit for this field."
+    },
+    {
+      "field": "chamber contraction angle (deg)",
+      "configured": 30.0,
+      "reported": 30.0,
+      "status": "match"
+    },
+    {
+      "field": "R1 / throat radius",
+      "configured": 1.5,
+      "reported": 1.5,
+      "status": "match"
+    },
+    {
+      "field": "nozzle throat radius / throat radius",
+      "configured": 0.382,
+      "reported": 0.3820209973753281,
+      "status": "match"
+    },
+    {
+      "field": "R2 / R2max ratio",
+      "configured": 0.089,
+      "reported": null,
+      "status": "unavailable",
+      "note": "The report gives R2 but not R2max, so this ratio cannot be checked."
+    },
+    {
+      "field": "nozzle convergence angle (deg)",
+      "configured": 30.0,
+      "reported": 30.0,
+      "status": "match"
+    },
+    {
+      "field": "nozzle exit angle (deg)",
+      "configured": 5.0,
+      "reported": 5.0,
+      "status": "match"
+    },
+    {
+      "field": "reaction efficiency estimate enabled",
+      "configured": true,
+      "reported": true,
+      "status": "match",
+      "note": "The report contains separate ideal and estimated-delivered performance tables."
+    },
+    {
+      "field": "bell nozzle efficiency applied",
+      "configured": true,
+      "reported": true,
+      "status": "match",
+      "note": "The report contains separate ideal and estimated-delivered performance tables."
+    },
+    {
+      "field": "multiphase flow enabled",
+      "configured": true,
+      "reported": true,
+      "status": "match"
+    },
+    {
+      "field": "chamber count",
+      "configured": 1,
+      "reported": 1,
+      "status": "match"
+    },
+    {
+      "field": "ambient pressure range start (atm)",
+      "configured": 1.0,
+      "reported": 1.0,
+      "status": "match"
+    },
+    {
+      "field": "ambient pressure range end (atm)",
+      "configured": 0.2,
+      "reported": 0.2,
+      "status": "match"
+    },
+    {
+      "field": "ambient pressure sample count",
+      "configured": 30,
+      "reported": 31,
+      "status": "review",
+      "note": "The PDF has both endpoint rows; 30 configured intervals can produce 31 rows."
+    },
+    {
+      "field": "equilibrium shifting mode",
+      "configured": false,
+      "reported": [
+        17.6605,
+        17.6607,
+        17.6812,
+        17.9438
+      ],
+      "status": "review",
+      "note": "Report molecular weight varies by station. Confirm the RPA 4.06 meaning of `shifting: false` before treating this as a mode mismatch."
+    },
+    {
+      "field": "nozzle exit pressure matches optimum-expansion ambient pressure (atm)",
+      "configured": 0.08783617073772514,
+      "reported": 0.0881,
+      "status": "match",
+      "note": "Checks that the PDF's exit pressure matches its reported optimum-expansion ambient pressure."
+    },
+    {
+      "field": "delivered sea-level Isp / exhaust-velocity closure (m/s)",
+      "configured": 1171.887810345,
+      "reported": 1171.8881,
+      "status": "match",
+      "note": "Internal report consistency check using standard gravity."
+    },
+    {
+      "field": "delivered sea-level thrust / mass-flow closure (kN)",
+      "configured": 26.73275977077,
+      "reported": 26.7328,
+      "status": "match",
+      "note": "Internal report consistency check using total mass flow and effective exhaust velocity."
+    }
+  ],
+  "reported_mach_stations": [
+    {
+      "name": "Injector",
+      "mach": 0.0
+    },
+    {
+      "name": "Nozzle inlet",
+      "mach": 0.0988
+    },
+    {
+      "name": "Nozzle throat",
+      "mach": 1.0
+    },
+    {
+      "name": "Nozzle exit",
+      "mach": 4.1322
+    }
+  ]
+}

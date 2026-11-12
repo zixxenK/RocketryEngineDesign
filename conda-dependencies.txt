@@ -1,0 +1,17 @@
+python=3.12
+cantera
+fluids
+ipykernel
+jupyterlab
+matplotlib
+meshio
+numpy
+openmdao
+optuna
+pandas
+pdfplumber
+pint
+pyvista
+pytest
+scipy
+pip

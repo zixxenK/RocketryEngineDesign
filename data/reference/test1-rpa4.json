@@ -1,0 +1,98 @@
+{
+  "case": {
+    "case_id": "test1-6in-of-1.5",
+    "source_pdf": "test1-6in-of-1.5.pdf",
+    "source_config": "Test6in.cfg",
+    "fuel": "RP-1",
+    "oxidizer": "O2(L)",
+    "chamber_pressure": {"value": 2.0, "unit": "MPa"},
+    "mixture_ratio": 1.5,
+    "mixture_ratio_source": "reported directly and confirmed by mass flows: 13.6870 / 9.1247"
+  },
+  "mass_flow": {
+    "total": {"value": 22.8117, "unit": "kg/s"},
+    "oxidizer": {"value": 13.6870, "unit": "kg/s"},
+    "fuel": {"value": 9.1247, "unit": "kg/s"}
+  },
+  "geometry": {
+    "chamber_diameter": {"value": 373.30, "unit": "mm"},
+    "throat_diameter": {"value": 152.40, "unit": "mm"},
+    "exit_diameter": {"value": 677.11, "unit": "mm"},
+    "cylindrical_chamber_length": {"value": 781.13, "unit": "mm"},
+    "chamber_length": {"value": 1020.00, "unit": "mm"},
+    "characteristic_length": {"value": 5407.90, "unit": "mm"},
+    "contraction_ratio": 6.00,
+    "nozzle_exit_to_throat_length_ratio": 7.13,
+    "nozzle_inlet_radius": {"value": 114.30, "unit": "mm"},
+    "nozzle_throat_rounding_radius": {"value": 29.11, "unit": "mm"},
+    "combustion_blend_radius": {"value": 63.20, "unit": "mm"},
+    "chamber_contraction_angle": {"value": 30.00, "unit": "degree"},
+    "nozzle_convergence_angle": {"value": 30.00, "unit": "degree"},
+    "nozzle_exit_angle": {"value": 5.00, "unit": "degree"}
+  },
+  "station_conditions": {
+    "pressure": [
+      {"value": 2.0000, "unit": "MPa"},
+      {"value": 1.9759, "unit": "MPa"},
+      {"value": 1.0985, "unit": "MPa"},
+      {"value": 0.0089, "unit": "MPa"}
+    ],
+    "temperature": [
+      {"value": 2489.8289, "unit": "K"},
+      {"value": 2486.8058, "unit": "K"},
+      {"value": 2209.6686, "unit": "K"},
+      {"value": 877.2925, "unit": "K"}
+    ],
+    "area_ratio": [6.0, 6.0, 1.0, 19.74],
+    "gamma": [1.2491, 1.2492, 1.2618, 1.2055],
+    "molecular_weight": [
+      {"value": 17.6605, "unit": "g/mol"},
+      {"value": 17.6607, "unit": "g/mol"},
+      {"value": 17.6812, "unit": "g/mol"},
+      {"value": 17.9438, "unit": "g/mol"}
+    ]
+  },
+  "performance": {
+    "ideal": {
+      "characteristic_velocity": {"value": 1642.5709, "unit": "m/s"},
+      "sea_level_effective_exhaust_velocity": {"value": 1244.1465, "unit": "m/s"},
+      "optimum_expansion_effective_exhaust_velocity": {"value": 2751.7445, "unit": "m/s"},
+      "vacuum_effective_exhaust_velocity": {"value": 2897.4598, "unit": "m/s"},
+      "sea_level_specific_impulse": {"value": 126.8676, "unit": "s"},
+      "optimum_expansion_specific_impulse": {"value": 280.5998, "unit": "s"},
+      "vacuum_specific_impulse": {"value": 295.4587, "unit": "s"},
+      "sea_level_thrust_coefficient": 0.7574,
+      "optimum_expansion_thrust_coefficient": 1.6753,
+      "vacuum_thrust_coefficient": 1.7640,
+      "sea_level_thrust": {"value": 28.3811, "unit": "kN"},
+      "optimum_expansion_thrust": {"value": 62.7721, "unit": "kN"},
+      "vacuum_thrust": {"value": 66.0960, "unit": "kN"}
+    },
+    "estimated_delivered": {
+      "characteristic_velocity": {"value": 1589.7027, "unit": "m/s"},
+      "sea_level_effective_exhaust_velocity": {"value": 1171.8881, "unit": "m/s"},
+      "optimum_expansion_effective_exhaust_velocity": {"value": 2630.9621, "unit": "m/s"},
+      "vacuum_effective_exhaust_velocity": {"value": 2771.9874, "unit": "m/s"},
+      "sea_level_specific_impulse": {"value": 119.4993, "unit": "s"},
+      "optimum_expansion_specific_impulse": {"value": 268.2835, "unit": "s"},
+      "vacuum_specific_impulse": {"value": 282.6640, "unit": "s"},
+      "sea_level_thrust_coefficient": 0.7372,
+      "optimum_expansion_thrust_coefficient": 1.6550,
+      "vacuum_thrust_coefficient": 1.7437,
+      "sea_level_thrust": {"value": 26.7328, "unit": "kN"},
+      "optimum_expansion_thrust": {"value": 60.0168, "unit": "kN"},
+      "vacuum_thrust": {"value": 63.2338, "unit": "kN"}
+    }
+  },
+  "mach_stations": [
+    {"name": "Injector", "mach": 0.0, "confidence": "rpa4-report-table"},
+    {"name": "Nozzle inlet", "mach": 0.0988, "confidence": "rpa4-report-table"},
+    {"name": "Nozzle throat", "mach": 1.0, "confidence": "rpa4-report-table"},
+    {"name": "Nozzle exit", "mach": 4.1322, "confidence": "rpa4-report-table"}
+  ],
+  "notes": [
+    "The PDF labels ideal and estimated delivered performance separately; do not compare one against the other.",
+    "The report identifies RP-1 and liquid oxygen at 2 MPa chamber pressure.",
+    "Exact station Mach values come from Table 2; the supplied PNG is a plot of those results and should be treated as a visual cross-check."
+  ]
+}
